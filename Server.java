@@ -1,3 +1,9 @@
+
+/* SWE 622 - Programming Assignment #1
+ * Server Class
+ * Created By: Harry Trebing - G00583550
+ */
+
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Arrays;
@@ -16,7 +22,7 @@ public class Server {
         this(System.getProperty("user.dir"));
     }
 
-    public void start(int port) {
+    public int start(int port) {
         this.initialize(port);
         this.isRunning = true;
 
@@ -34,14 +40,15 @@ public class Server {
                     this.isRunning = false;
                 }
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                return -1;
             }
         }
         try {
             this.serverSocket.close();
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            return -1;
         }
+        return 0;
     }
     
     public void initialize (int port) {
@@ -136,7 +143,7 @@ public class Server {
             //Validate that directory doesn't already exist
             if (this.fileManager.isDirectory(cArgs.getServerFilePath())) {
                 this.messenger.setProtocol(Protocol.ERROR_DIRECTORY_ALREADY_EXISTS);
-                this.messenger.setMessage("Directory already exists" + cArgs.getServerFilePath());
+                this.messenger.setMessage("Destination already exists as a directory on the Server: " + args[0]);
                 this.messenger.sendMessage();
                 return;
             }
@@ -156,18 +163,6 @@ public class Server {
             while (this.messenger.getProtocol() == Protocol.TRANSMIT || this.messenger.getProtocol() == Protocol.RETRANSMIT) {
                 cArgs = new DataTransmitArgs(this.messenger.getArguments());
                 byte[] data = this.messenger.getData();
-
-                //If the client sends a retransmit request
-                if (this.messenger.getProtocol() == Protocol.RETRANSMIT) {
-                    //Truncate file (if necessary) and write to it
-                }
-
-                //If the client's request is different from what the server was expecting
-                if (!cArgs.equals(sArgs)) {
-                    //send RETRANSMIT_REQUEST
-                    //Maybe make a while loop if the client sends multiple bad requests
-                    //Or a continue; clause
-                }
 
                 this.fileManager.writeToFile(cArgs.getServerFilePath(), data);
                 sArgs.setCurrentStart((int)this.fileManager.getFileSize(cArgs.getServerFilePath()));
@@ -214,11 +209,20 @@ public class Server {
             cArgs = new DataTransmitArgs(args);
             sArgs = new DataTransmitArgs(args);
 
+            //Validate that location is not a directory
+            if (this.fileManager.isDirectory(cArgs.getServerFilePath())) {
+                this.messenger.setProtocol(Protocol.ERROR_FILE_DOES_NOT_EXIST);
+                this.messenger.setArgument(sArgs.toArgs());
+                this.messenger.setMessage("Location exists as a directory on the Server: " + cArgs.getServerFilePath());
+                this.messenger.sendMessage();
+                return;
+            }
+
             //Validate that the file exists
             if (!this.fileManager.isFile(cArgs.getServerFilePath())) {
                 this.messenger.setProtocol(Protocol.ERROR_FILE_DOES_NOT_EXIST);
                 this.messenger.setArgument(sArgs.toArgs());
-                this.messenger.setMessage("File does not exist " + cArgs.getServerFilePath());
+                this.messenger.setMessage("File does not exist: " + cArgs.getServerFilePath());
                 this.messenger.sendMessage();
                 return;
             }
@@ -255,13 +259,17 @@ public class Server {
                 cArgs = new DataTransmitArgs(this.messenger.getArguments());
 
                 //Should I keep this? Thread should terminate if response is invalid
-                while (this.messenger.getProtocol() != Protocol.RECEIPT && !cArgs.equals(sArgs)) {
-                    this.messenger.close();
-                    this.messenger.open();
+                while (this.messenger.getProtocol() != Protocol.RECEIPT) {
                     this.messenger.setProtocol(Protocol.RETRANSMIT);
                     this.messenger.setCommand(Command.DOWNLOAD_FILE);
                     this.messenger.setArgument(sArgs.toArgs());
                     this.messenger.setData(chunk);
+                    try {
+                        this.messenger.receiveMessage();
+                    } catch (Exception e) {
+                        //indicates the client has stopped responding
+                        return;
+                    }
                 }
             }
 
@@ -295,7 +303,7 @@ public class Server {
             //Validate that directory doesn't already exist
             if (this.fileManager.isDirectory(args[0])) {
                 this.messenger.setProtocol(Protocol.ERROR_DIRECTORY_ALREADY_EXISTS);
-                this.messenger.setMessage("Directory already exists" + args[0]);
+                this.messenger.setMessage("Directory already exists: " + args[0]);
                 this.messenger.sendMessage();
                 return;
             }
@@ -303,7 +311,7 @@ public class Server {
             //Validate that filepath doesn't already point to a file
             if (this.fileManager.isFile(args[0])) {
                 this.messenger.setProtocol(Protocol.ERROR_FILE_ALREADY_EXISTS);
-                this.messenger.setMessage("Filepath already exists as directory" + args[0]);
+                this.messenger.setMessage("Location already exists as directory as a file: " + args[0]);
                 this.messenger.sendMessage();
                 return;
             }
@@ -350,12 +358,17 @@ public class Server {
             //Validate that directory DOES exist
             if (!this.fileManager.isDirectory(args[0])) {
                 this.messenger.setProtocol(Protocol.ERROR_DIRECTORY_DOES_NOT_EXIST);
-                this.messenger.setMessage("Directory does not exist" + args[0]);
+                this.messenger.setMessage("Directory does not exist on the server: " + args[0]);
                 this.messenger.sendMessage();
                 return;
             }
 
-            //TODO - isEmpty check
+            if (!this.fileManager.isEmpty(args[0])) {
+                this.messenger.setProtocol(Protocol.ERROR_DIRECTORY_NOT_EMPTY);
+                this.messenger.setMessage("Directory is not empty: " + args[0]);
+                this.messenger.sendMessage();
+                return;
+            }
 
             this.messenger.setProtocol(Protocol.ACKNOWLEDGE);
             this.messenger.setCommand(Command.REMOVE_DIRECTORY);
@@ -366,7 +379,7 @@ public class Server {
 
             if (result == false) {
                 this.messenger.setProtocol(Protocol.ERROR);
-                this.messenger.setMessage("Directory was unable to be deleted " + args[0]);
+                this.messenger.setMessage("Directory was unable to be deleted: " + args[0]);
                 this.messenger.sendMessage();
                 return;
             }
@@ -395,10 +408,17 @@ public class Server {
                 return;
             }
 
+            if (this.fileManager.isDirectory(args[0])) {
+                this.messenger.setProtocol(Protocol.ERROR_DIRECTORY_ALREADY_EXISTS);
+                this.messenger.setMessage("Location exists as a directory on the server: " + args[0]);
+                this.messenger.sendMessage();
+                return;
+            }
+
             //Validate that the file DOES exist
             if (!this.fileManager.isFile(args[0])) {
                 this.messenger.setProtocol(Protocol.ERROR_FILE_DOES_NOT_EXIST);
-                this.messenger.setMessage("File does not exist" + args[0]);
+                this.messenger.setMessage("File does not exist: " + args[0]);
                 this.messenger.sendMessage();
                 return;
             }
@@ -412,7 +432,7 @@ public class Server {
 
             if (result == false) {
                 this.messenger.setProtocol(Protocol.ERROR);
-                this.messenger.setMessage("File was unable to be deleted " + args[0]);
+                this.messenger.setMessage("File was unable to be deleted: " + args[0]);
                 this.messenger.sendMessage();
                 return;
             }
@@ -444,7 +464,7 @@ public class Server {
             //Validate that directory DOES exist
             if (!this.fileManager.isDirectory(args[0])) {
                 this.messenger.setProtocol(Protocol.ERROR_DIRECTORY_DOES_NOT_EXIST);
-                this.messenger.setMessage("Directory does not exist " + args[0]);
+                this.messenger.setMessage("Directory does not exist: " + args[0]);
                 this.messenger.sendMessage();
                 return;
             }

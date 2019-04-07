@@ -1,4 +1,9 @@
 
+/* SWE 622 - Programming Assignment #1
+ * FileManager Class
+ * Created By: Harry Trebing - G00583550
+ */
+
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -38,6 +43,14 @@ public class FileManager {
     public boolean isDirectory (String filePath) {
         Path p = resolveFilePath(filePath);
         return Files.isDirectory(p);
+    }
+
+    public boolean isEmpty (String filePath) {
+        if (!isDirectory(filePath)) {
+            return false;
+        }
+        File f = new File(filePath);
+        return f.list().length == 0;
     }
 
     public long getFileSize (String filePath) {

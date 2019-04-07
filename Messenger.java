@@ -1,4 +1,9 @@
 
+/* SWE 622 - Programming Assignment #1
+ * Messenger Class
+ * Created By: Harry Trebing - G00583550
+ */
+
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.InetSocketAddress;

@@ -1,3 +1,8 @@
+/* SWE 622 - Programming Assignment #1
+ * Client Class
+ * Created By: Harry Trebing - G00583550
+ */
+
 import java.util.Arrays;
 import java.util.Map;
 import java.util.HashMap;
@@ -7,25 +12,33 @@ public class Client {
     private FileManager fileManager;
     private static final int dataSize = 1000;
 
-    public Client (String serverHostName, int serverPortNumber, String root) {
-        this.messenger = new Messenger (serverHostName, serverPortNumber);
-        this.fileManager = new FileManager(root);
-    }
-
-    public Client (String serverHostName, int serverPortNumber) {
-        this(serverHostName, serverPortNumber, System.getProperty("user.dir"));
-    }
-
     public Client (String root) {
-        String[] serverAddr = System.getenv("PA1_SERVER").split(":");
-        this.messenger = new Messenger(serverAddr[0], Integer.parseInt(serverAddr[1]));
         this.fileManager = new FileManager(root);
     }
 
     public Client() {
-        String[] serverAddr = System.getenv("PA1_SERVER").split(":");
-        this.messenger = new Messenger(serverAddr[0], Integer.parseInt(serverAddr[1]));
         this.fileManager = new FileManager (System.getProperty("user.dir"));
+    }
+
+    public int initialize () {
+        String[] serverAddr;
+        try {
+            serverAddr = System.getenv("PA1_SERVER").split(":");
+        } catch (Exception e) {
+            this.printError("Environmental Variable 'PA1_SERVER' was not set up correctly");
+            return -1;
+        }
+        return this.initialize(serverAddr[0], Integer.parseInt(serverAddr[1]));
+    }
+
+    public int initialize (String serverHostName, int serverPortNumber) {
+        try {
+            this.messenger = new Messenger (serverHostName, serverPortNumber);
+            return 0;
+        } catch (Exception e) {
+            this.printError("Errors encountered when trying to contact server");
+            return -1;
+        }
     }
 
     public void printOutput(String msg) {
@@ -33,11 +46,15 @@ public class Client {
     }
 
     public void printError(String msg) {
-        System.out.println (msg);
+        System.err.println(msg);
     }
 
     public int shutdown() {
-        this.messenger.open();
+        try{
+            this.messenger.open();
+        } catch (Exception e) {
+            return this.handleFailedConnection();
+        }
 
         this.messenger.setProtocol(Protocol.REQUEST);
         this.messenger.setCommand(Command.SHUTDOWN);
@@ -50,10 +67,21 @@ public class Client {
     }
 
     public int uploadFile(String clientFilePath, String serverFilePath) {
-        byte[] file = this.fileManager.readFile(clientFilePath);
+        byte[] file;
+        try {
+            file = this.fileManager.readFile(clientFilePath);
+        } catch (Exception e) {
+            return this.handleNonexistantClientFile();
+        }
+
         DataTransmitArgs cArgs = new DataTransmitArgs();
         DataTransmitArgs sArgs = new DataTransmitArgs();
-        this.messenger.open();
+
+        try{
+            this.messenger.open();
+        } catch (Exception e) {
+            return this.handleFailedConnection();
+        }
 
         //Initialize DataTransmitArgs
         cArgs.setClientFilePath(clientFilePath);
@@ -100,14 +128,15 @@ public class Client {
                 this.messenger.setArgument(cArgs.toArgs());
                 this.messenger.setData(chunk);
             }
-            this.printOutput("\r" + (cArgs.getCurrentEnd() / cArgs.getEnd()) + "% Uploaded");
+            this.printOutput("\rUploading file ...." + (cArgs.getCurrentEnd() / cArgs.getEnd()) + "% (changes real-time)");
         }
 
         this.messenger.setProtocol(Protocol.FINISH);
         this.messenger.setCommand(Command.UPLOAD_FILE);
         this.messenger.setArgument(cArgs.toArgs());
         this.messenger.sendMessage();
-        this.printOutput("100% Uploaded");
+        this.printOutput("\rUploading file .... 100% (changes real-time)");
+        this.printOutput("\nFile uploaded.\n");
 
         this.messenger.close();
         return 0;
@@ -116,7 +145,11 @@ public class Client {
     public int downloadFile(String serverFilePath, String clientFilePath) {
         DataTransmitArgs cArgs = new DataTransmitArgs();
         DataTransmitArgs sArgs = new DataTransmitArgs();
-        this.messenger.open();
+        try{
+            this.messenger.open();
+        } catch (Exception e) {
+            return this.handleFailedConnection();
+        }
 
         //Initialize DataTransmitArgs
         cArgs.setClientFilePath(clientFilePath);
@@ -149,6 +182,8 @@ public class Client {
         //This won't execute until the server gets an answer
         while (this.messenger.getProtocol() == Protocol.TRANSMIT || this.messenger.getProtocol() == Protocol.RETRANSMIT) {
             sArgs = new DataTransmitArgs(this.messenger.getArguments());
+            cArgs.setCurrentEnd(sArgs.getCurrentEnd());
+            cArgs.setEnd(sArgs.getEnd());
             byte[] data = this.messenger.getData();
 
             //If the client sends a retransmit request
@@ -165,13 +200,13 @@ public class Client {
 
             this.fileManager.writeToFile(clientFilePath, data);
             cArgs.setCurrentStart((int)this.fileManager.getFileSize(clientFilePath));
+            this.printOutput("\rDownloading file .... " + cArgs.getCurrentEnd() / cArgs.getEnd() + "% (changes real time)");
 
             this.messenger.setProtocol(Protocol.RECEIPT);
             this.messenger.setCommand(Command.DOWNLOAD_FILE);
             this.messenger.setArgument(cArgs.toArgs());
             this.messenger.setMessage("Receipt of data thru byte " + cArgs.getCurrentStart() +
             " for the download of " + serverFilePath + " to " + clientFilePath);
-
             this.messenger.sendMessage();
             this.messenger.receiveMessage();
         }
@@ -182,13 +217,19 @@ public class Client {
             this.messenger.setArgument(cArgs.toArgs());
             this.messenger.setMessage("File " + serverFilePath + " successfully downloaded");
             this.messenger.sendMessage();
+            this.printOutput("\rDownloading file .... 100% (changes real-time)");
+            this.printOutput("\nFile downloaded.\n");
             return 0;
         }
         return -1;
     }
 
     public int removeFile(String filePath) {
-        this.messenger.open();
+        try{
+            this.messenger.open();
+        } catch (Exception e) {
+            return this.handleFailedConnection();
+        }
 
         this.messenger.setProtocol(Protocol.REQUEST);
         this.messenger.setCommand(Command.REMOVE_FILE);
@@ -208,7 +249,7 @@ public class Client {
         int val = 0;
         Protocol p = this.messenger.getProtocol();
         if (p == Protocol.SUCCESS) {
-            this.printOutput("File " + filePath + " was removed successfully");
+            //this.printOutput("File " + filePath + " was removed successfully");
         } else {
             this.printError (p.toString() + " ." + this.messenger.getMessage());
             val = -1;
@@ -219,7 +260,11 @@ public class Client {
     }
 
     public int createDirectory(String filePath) {
-        this.messenger.open();
+        try{
+            this.messenger.open();
+        } catch (Exception e) {
+            return this.handleFailedConnection();
+        }
 
         this.messenger.setProtocol(Protocol.REQUEST);
         this.messenger.setCommand(Command.CREATE_DIRECTORY);
@@ -238,7 +283,7 @@ public class Client {
         int val = 0;
         Protocol p = this.messenger.getProtocol();
         if (p == Protocol.SUCCESS) {
-            this.printOutput("Directory " + filePath + " creation was a success");
+            //this.printOutput("Directory " + filePath + " creation was a success");
         } else {
             this.printError (p.toString() + " ." + this.messenger.getMessage());
             val = -1;
@@ -249,7 +294,11 @@ public class Client {
     }
 
     public int removeDirectory (String filePath) {
-        this.messenger.open();
+        try{
+            this.messenger.open();
+        } catch (Exception e) {
+            return this.handleFailedConnection();
+        }
 
         this.messenger.setProtocol(Protocol.REQUEST);
         this.messenger.setCommand(Command.REMOVE_DIRECTORY);
@@ -269,7 +318,7 @@ public class Client {
         int val = 0;
         Protocol p = this.messenger.getProtocol();
         if (p == Protocol.SUCCESS) {
-            this.printOutput("Directory " + filePath + " removal was a success");
+            //this.printOutput("Directory " + filePath + " removal was a success");
         } else {
             this.printError (p.toString() + " ." + this.messenger.getMessage());
             val = -1;
@@ -280,7 +329,11 @@ public class Client {
     }
 
     public int listContents (String filePath) {
-        this.messenger.open();
+        try{
+            this.messenger.open();
+        } catch (Exception e) {
+            return this.handleFailedConnection();
+        }
 
         this.messenger.setProtocol(Protocol.REQUEST);
         this.messenger.setCommand(Command.LIST_CONTENTS);
@@ -300,7 +353,7 @@ public class Client {
         int val = 0;
         Protocol p = this.messenger.getProtocol();
         if (p == Protocol.SUCCESS) {
-            this.printOutput("Directory " + filePath + " contents: " + Arrays.toString(this.messenger.getArguments()));
+            this.printOutput(Arrays.toString(this.messenger.getArguments()) +"\n");
         } else {
             this.printError (p.toString() + " ." + this.messenger.getMessage());
             val = -1;
@@ -321,5 +374,19 @@ public class Client {
         } else {
             return true;
         }
+    } 
+
+    private int handleFailedConnection () {
+        this.printError("Server could not be reached");
+        return -1;
+    }
+
+    private int handleNonexistantClientFile() {
+        this.printError("File does not exist on the client");
+        return -1;
+    }
+
+    public static void main(String[] args) {
+
     }
 }

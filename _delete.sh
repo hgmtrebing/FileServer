@@ -1,11 +1,9 @@
-java App client rm serverDir/Message.java
-java App client rm serverDir/App.java
-java App client rm clientDir/Message.java
-java App client rm clientDir/App.java
+java -jar pa1.jar client rm serverDir/Message.java
+java -jar pa1.jar client rm serverDir/App.java
+java -jar pa1.jar client rm clientDir/Message.java
+java -jar pa1.jar client rm clientDir/App.java
 sleep 1s
-java App client rmdir clientDir
-java App client rmdir serverDir
+java -jar pa1.jar client rmdir clientDir
+java -jar pa1.jar client rmdir serverDir
 sleep 1s
-java App client shutdown
-sleep 1s
-rm *.class
+java -jar pa1.jar client shutdown

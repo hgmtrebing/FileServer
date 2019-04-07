@@ -1,4 +1,9 @@
 
+/* SWE 622 - Programming Assignment #1
+ * DataTransmitArgs Class
+ * Created By: Harry Trebing - G00583550
+ */
+
 public class DataTransmitArgs {
     private String clientFilePath;
     private String serverFilePath;

@@ -1,3 +1,8 @@
+
+/* SWE 622 - Programming Assignment #1
+ * Message Class
+ * Created By: Harry Trebing - G00583550
+ */
 import java.io.Serializable;
 
 public class Message implements Serializable{
